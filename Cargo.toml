@@ -1,3 +1,6 @@
+[workspace]
+members = [ "micro-macro" ]
+exclude = [ "micro-macro-core" ]
 [package]
 name = "microrust"
 version = "0.1.0"
@@ -6,6 +9,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+micro-macro.path = "./micro-macro"
 cortex-m = { version = "0.7.7", features = ["critical-section-single-core"] }
 cortex-m-rt = "0.7.3"
 panic-halt = "0.2.0"

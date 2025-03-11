@@ -1,0 +1,10 @@
+[package]
+name = "micro-macro"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+micro-macro-core.path = "../micro-macro-core"

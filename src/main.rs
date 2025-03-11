@@ -1,5 +1,3 @@
-#![feature(strict_provenance)]
-#![feature(inline_const)]
 #![no_std]
 #![no_main]
 
@@ -59,7 +57,6 @@ impl From<WriteError> for PortError {
     }
 }
 pub trait Port: Addressable {
-    const NAME: &'static str;
     const RANGE: RangeToInclusive<u8>;
     #[inline]
     fn is_valid(pin_mask: usize) -> bool {
@@ -202,17 +199,11 @@ pub trait RegisterArray<const COUNT: usize> {
 pub trait WriteArray<const COUNT: usize>: RegisterArray<COUNT> {
     #[inline]
     fn write_array(pin_mask: usize, value: u32) -> Result<(), WriteError> {
-        // if !Self::Port::is_valid(pin_mask) {
-        //     rprintln!("Invalid port-bitmask");
-        //     return Err(WriteError(ErrorKind::BadIndex));
-        // };
-
         // Bits 17 and 16 => SENSE
         // Bits 10, 9, and 8 => DRIVE
         // Bits 3 and 2 => PULL
         // Bit 1 => INPUT
         // Bit 0 => DIR
-        // let pin_id = 1usize << (pin_mask as usize);
         let address = Self::ADDRS[pin_mask as usize] as *mut usize;
         rprintln!("[WriteArray::write_array] address {:#x}", address.addr(),);
         unsafe { core::ptr::write_volatile(address, value as usize) };
@@ -238,99 +229,12 @@ pub trait ReadArray<const COUNT: usize>: RegisterArray<COUNT> {
     }
 }
 
-macro_rules! def_reg_trait {
-    ($name:ident, $comment:literal, R) => {
-        paste::paste! {
-            #[doc = "marker trait for" $comment]
-            pub trait $name: Read {}
-        }
-    };
-    ($name:ident, $comment:literal, W) => {
-        paste::paste! {
-            #[doc = "marker trait for" $comment]
-            pub trait $name: Write {}
-        }
-    };
-    ($name:ident, $comment:literal, RW) => {
-        paste::paste! {
-            #[doc = "marker trait for" $comment]
-            pub trait $name: Read + Write {}
-        }
-    };
-}
-
 macro_rules! def_portoffset {
     ($name:ident, $addr:literal, $comment:literal) => {
         #[doc = $comment]
         pub struct $name;
         impl crate::Offset for $name {
             const VALUE: usize = $addr;
-        }
-    };
-}
-macro_rules! reg {
-    ($name:ident, $addr:literal, RW, $comment:literal) => {
-        def_reg_trait!($name, $comment, RW);
-        // def_portoffset!($name, $addr, $comment);
-        paste::paste! {
-            #[doc = $comment "bank" 0]
-            pub struct [<$name 0>];
-            impl $name for [<$name 0>] {}
-            impl Register for [<$name 0>] {
-                type Port = P0;
-                const OFFSET: usize = $addr;
-                // const ACCESS: crate::Access = crate::Access::RW;
-            }
-            impl Read for [<$name 0>] {}
-            impl Write for [<$name 0>] {}
-            #[doc = $comment "bank" 1]
-            pub struct [<$name 1>];
-            impl $name for [<$name 1>] {}
-            impl Register for [<$name 1>] {
-                type Port = P1;
-                const OFFSET: usize = $addr;
-            }
-            impl Read for [<$name 1>] {}
-            impl Write for [<$name 1>] {}
-        }
-    };
-    ($name:ident, $addr:literal, R, $comment:literal) => {
-        def_reg_trait!($name, $comment, R);
-        // def_portoffset!($name, $addr, $comment);
-        paste::paste! {
-            #[doc = $comment "bank" 0]
-            pub struct [<$name 0>];
-            impl $name for [<$name 0>] {}
-            impl Register for [<$name 0>] {
-                type Port = P0;
-                const OFFSET: usize = $addr;
-            }
-            impl Read for [<$name 0>] {}
-            #[doc = $comment "bank" 1]
-            pub struct [<$name 1>];
-            impl $name for [<$name 1>] {}
-            impl Register for [<$name 1>] {
-                type Port = P1;
-                const OFFSET: usize = $addr;
-            }
-            impl Read for [<$name 1>] {}
-        }
-    };
-    ($name:ident, $addr:literal, $acc:ident, $comment:literal) => {
-        def_reg_trait!($name, $comment);
-        // def_portoffset!($name, $addr, $comment);
-        paste::paste! {
-            #[doc = $comment "bank" 0]
-            pub struct [<$name 0>];
-            impl crate::Register<P0, $name> for [<$name 0>] {
-                const ACCESS: crate::Access = $acc;
-            }
-            #[doc = $comment "bank" 1]
-            pub struct [<$name 1>];
-            impl crate::Register<P1, $name> for [<$name 1>] {
-                const ACCESS: crate::Access = $acc;
-            }
-            impl [<$name REG>]<P1, $name> for [<$name 1>] {}
         }
     };
 }
@@ -395,20 +299,30 @@ macro_rules! rar {
         }
     };
 }
-reg!(OUT, 0x504, RW, "Write GPIO port");
-reg!(OUTSET, 0x508, RW, "Set individual bits in GPIO port");
-reg!(OUTCLR, 0x50C, RW, "Clear individual bits in GPIO port");
-reg!(IN, 0x510, R, "Read GPIO port");
-reg!(DIR, 0x514, RW, "Direction of GPIO pins");
-reg!(DIRSET, 0x518, RW, "Set direction of GPIO pins");
-reg!(DIRCLR, 0x51C, RW, "Clear direction of GPIO pins");
-reg!(LATCH, 0x520, RW, "Latch register indicating what GPIO pins that have met the criteria set in the [PIN_CNF[n]]. SENSE registers");
-reg!(
-    DETECTMODE,
-    0x524,
-    RW,
-    "Select between default DETECT signal behavior and LDETECT mode"
-);
+micro_macro::reg! {OUT, ReadWrite, 0x504}
+micro_macro::reg! {OUTSET, ReadWrite, 0x508}
+micro_macro::reg! {OUTCLR, ReadWrite, 0x50C}
+micro_macro::reg! {IN, Read, 0x510}
+// #[reg(ReadWrite, 0x504)]
+// pub struct OUT;
+// reg!(OUT, 0x504, RW, "Write GPIO port");
+// reg!(OUTSET, 0x508, RW, "Set individual bits in GPIO port");
+// reg!(OUTCLR, 0x50C, RW, "Clear individual bits in GPIO port");
+// reg!(IN, 0x510, R, "Read GPIO port");
+
+//"Direction of GPIO pins"
+micro_macro::reg! {DIR, ReadWrite, 0x514}
+
+//"Set direction of GPIO pins"
+micro_macro::reg! {DIRSET, ReadWrite, 0x518 }
+
+//"Clear direction of GPIO pins"
+micro_macro::reg! {DIRCLR, ReadWrite, 0x51C}
+//"Latch register indicating what GPIO pins that have met the criteria set in the [PIN_CNF[n]]. SENSE registers"
+micro_macro::reg! {LATCH, ReadWrite, 0x520 }
+
+//"Select between default DETECT signal behavior and LDETECT mode"
+micro_macro::reg! {DETECTMODE, ReadWrite, 0x524}
 rar!(PINCNF, 0x700, 32, RW, "Configuration of GPIO pins");
 impl core::ops::Index<u32> for PINCNF0 {
     type Output = usize;
@@ -590,16 +504,16 @@ macro_rules! def_pin {
         })*
     };
 }
+use micro_macro::{address, port};
 /// General purpose input and output port
 /// P0.00 to P0.31 implemented
+#[address(0x5000_0000)]
+#[port(..=31)]
 pub struct P0;
-impl Addressable for P0 {
-    const ADDR: usize = 0x5000_0000;
-}
-impl Port for P0 {
-    const RANGE: RangeToInclusive<u8> = ..=31;
-    const NAME: &'static str = "p0";
-}
+// impl Port for P0 {
+//     const RANGE: RangeToInclusive<u8> = ..=31;
+//     const NAME: &'static str = "p0";
+// }
 def_pin!(
     0, 00, 01, 02, 03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
     23, 24, 25, 26, 27, 28, 29, 30, 31
@@ -612,7 +526,6 @@ impl Addressable for P1 {
 }
 impl Port for P1 {
     const RANGE: RangeToInclusive<u8> = ..=9;
-    const NAME: &'static str = "p1";
 }
 def_pin!(1, 00, 01, 02, 03, 04, 05, 06, 07, 08, 09);
 
@@ -735,29 +648,15 @@ fn main() -> ! {
     loop {
         _lg!("Soulja boy tell em");
         rprintln!("{}", P014::read_out().unwrap());
-        // _lg!("Pulling up");
-        // let _ = P002::pull_up().unwrap();
-        // for _ in 0..1_000_000 {
-        //     nop();
-        // }
-        // rprintln!("Disabling pull");
-        // let _ = P002::pull_disable().unwrap();
-        // for _ in 0..1_000_000 {
-        //     nop();
-        // }
-        // rprintln!("Pulling down");
-        // let _ = P002::pull_down().unwrap();
-        // for _ in 0..1_000_000 {
-        //     nop();
-        // }
-        // if P023::read_in().unwrap().into() {
-        //     rprintln!("Button B pressed!");
-        // }
+        _lg!("Pulling up");
+        let _ = P002::pull_up().unwrap();
         for _ in 0..1_000_000 {
-            let is_high: bool = P014::read_in().unwrap().into();
-            if !is_high {
-                rprintln!("Button a");
-            }
+            nop();
+        }
+        rprintln!("Pulling down");
+        let _ = P002::pull_down().unwrap();
+        for _ in 0..1_000_000 {
+            nop();
         }
     }
 }

@@ -1,0 +1,9 @@
+[package]
+name = "micro-macro-core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+proc-macro2 = "1.0.94"
+quote = "1.0.39"
+syn = {version = "2.0.100", features = ["full"]}
